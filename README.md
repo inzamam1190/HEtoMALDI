@@ -20,3 +20,4 @@ You can then load the PCA output file as:
 f = h5py.File(path-to-save-PCA-output,'r') 
 output = f['output']
 ```
+CCA tasks are given in image_registration notebook
