@@ -6,14 +6,14 @@ import hdf5plugin
 import pickle as pk
 from sklearn.decomposition import IncrementalPCA
 
-def get_train_data(h5_list):
-    train_datas = []
+def jointPCA(h5_list):
+    ipca = IncrementalPCA(n_components=200, batch_size=100)
 
     print('Getting training data from h5 datasets......')
     for i in h5_list:
-        # For each dataset get every 4th x,y values
-        xs = np.arange(0,i.shape[1],4)
-        ys = np.arange(0,i.shape[2],4)
+        # For each dataset get every 2nd x,y values
+        xs = np.arange(0,i.shape[1],2)
+        ys = np.arange(0,i.shape[2],2)
 
         # Make a tuple of x,y values. if we have 20 x-points and 20 y-points there will be 400 tuples.
         tuples = []
@@ -35,10 +35,19 @@ def get_train_data(h5_list):
             # include other coordinates having some signal to the training data    
             train_data.append(i[:, coords[j][0], coords[j][1]])
         train_data = np.array(train_data)
-        train_datas.append(train_data)
 
-    return train_datas
+        print('Training incremental PCA.....')
+        for i in tqdm(range(0, train_data.shape[0]//200)):
+            ipca.partial_fit(train_data[i*200:(i+1)*200, :])
+        
+        del train_data
+    
+    with open('joint-ipca.pkl', 'wb') as pickle_file:
+        pk.dump(ipca, pickle_file)
 
+    print(ipca.explained_variance_ratio_[:10])
+
+    return None
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -53,28 +62,11 @@ if __name__ == '__main__':
         f = h5py.File(args.datadir[i],'r') 
         intensity_datas.append(f['interpolated_intensities'])
 
-    # list of training data from the 6 datasets
-    training_data_list = get_train_data(intensity_datas)
+    # run joint PCA
+    _ = jointPCA(intensity_datas)
 
-    ipca = IncrementalPCA(n_components=200, batch_size=100)
+   
 
-    # Train incremental PCA
-    print('Training incremental PCA.....')
-    for p in range(6):
-        for i in tqdm(range(0, training_data_list[p].shape[0]//200)):
-            ipca.partial_fit(training_data_list[p][i*200:(i+1)*200, :])
 
-    #Values of variability explained by first 10 components. 
-    print(ipca.explained_variance_ratio_[:10])
-
-    # plot explained variance ration vs. number of PCA components
-    plt.plot(range(1,ipca.explained_variance_ratio_.shape[0]+1),np.cumsum(ipca.explained_variance_ratio_))
-    plt.axhline(y=0.95, c='r')
-    plt.show()
-
-    # save the ipca trained model for transforming datasets
-
-    with open('joint-ipca.pkl', 'wb') as pickle_file:
-        pk.dump(ipca, pickle_file)
 
     
