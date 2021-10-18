@@ -36,7 +36,7 @@ def interpolation_msi(p, min_mz:int, max_mz:int, interpStep:float, filename:str)
     
     for i,(x,y,z) in tqdm(enumerate(p.coordinates),total=len(p.coordinates)):
         m_by_z, intensity = p.getspectrum(i)
-        itest = scinterp.interp1d(m_by_z, intensity, kind="slinear", fill_value="extrapolate")
+        itest = scinterp.interp1d(m_by_z, intensity,fill_value=(0,0), bounds_error=False)
         interped = itest(common_mz)
         intensity_values[:,x,y] = interped
     
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     print(p.imzmldict) #print the metadata
 
-    _ = interpolation_msi(p, 50, 2800, 0.001, args.filename)
+    _ = interpolation_msi(p,100, 1000, 0.001, args.filename)
 
     f = h5py.File(args.filename,'r') 
     intensity_data = f['interpolated_intensities']
