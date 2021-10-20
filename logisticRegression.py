@@ -24,7 +24,7 @@ def logisticRegression(data_list):
     print(clf.coef_.shape)
 
     # Evaluate performance
-    y_pred = clf.predict(X_test_scaled)
+    y_pred = clf.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     print(f'Accuracy: {accuracy}')
     auc = roc_auc_score(y_test, y_pred)
