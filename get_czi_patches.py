@@ -6,30 +6,26 @@ from tqdm import tqdm
 import hdf5plugin
 from patchify import patchify
 
-def save_patches(data_array, mask_array, path:str):
+def save_patches(data_array, mask_array, path:str, imagenumber:str):
     for i in tqdm(range(data_array.shape[0])):  
-        # convert image patches into torch tensor
+        if data_array[i].mean() == 0.0:
+            continue
+        # convert both patches and labels into torch tensor
         data = torch.from_numpy(data_array[i])
-
-        # threshold mask array and get label for the patch
-        if mask_array[i].mean() >= 0.5:
-            label = 1
-        else: 
-            label = 0
-        # save data and label in the same .pt file as dictionaries
-        torch.save({"data": data, "label":label}, path + f'/patch{i}.pt')
+        label = torch.from_numpy(label_array[i])
+        torch.save({"data": data, "label":label}, path + f'/{imagenumber}_patch{i}.pt')
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--datafile', '-d', nargs='*', required='True',
+    parser.add_argument('--datafile', '-d', required='True',
             help='CZI data hdf5 file containing all czi images')
-    parser.add_argument('--mask', '-m', nargs='*', required='True',
+    parser.add_argument('--mask', '-m', required='True',
             help='Hdf5 file for all czi masks')
-    parser.add_argument('--image', '-i', nargs='*', required='True',
+    parser.add_argument('--image', '-i', required='True',
             help='czi image file number i.e 1327,1900,2255 etc.')
-    parser.add_argument('--path', '-p', nargs='*', required='True',
+    parser.add_argument('--path', '-p', required='True',
             help='path to save the patches')
     args = parser.parse_args()
 
@@ -59,7 +55,7 @@ if __name__ == '__main__':
 
 	del img, label
 
-	_ = save_patches(patches_image, patches_labels, args.path)
+	_ = save_patches(patches_image, patches_labels, args.path, args.image)
 
 	f1.close()
 	f2.close()
