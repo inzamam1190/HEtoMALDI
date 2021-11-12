@@ -11,6 +11,7 @@ from sklearn.model_selection import KFold, train_test_split
 import time
 import czi_dataloader
 from torch import nn
+from torchinfo import summary
 
 class UNET(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -24,7 +25,8 @@ class UNET(nn.Module):
         self.upconv2 = self.expand_block(64*2, 32, 3, 1)
         self.upconv1 = self.expand_block(32*2, out_channels, 3, 1)
 
-    def __call__(self, x):
+    # define as forward not call
+    def forward(self, x):
 
         # downsampling part
         conv1 = self.conv1(x)
@@ -65,10 +67,11 @@ class UNET(nn.Module):
 
 
 def train(model, train_dl, valid_dl, loss_fn, optimizer, acc_fn, epochs=1):
+    device = torch.device("cuda:0")
     start = time.time()
-
-    train_loss, valid_loss = [], []
-
+    model.to(device)
+    train_loss, valid_loss, train_acc, valid_acc = [], [], [], []
+    
     best_acc = 0.0
 
     for epoch in range(epochs):
@@ -89,9 +92,9 @@ def train(model, train_dl, valid_dl, loss_fn, optimizer, acc_fn, epochs=1):
             step = 0
 
             # iterate over data
-            for x, y in dataloader:
-                #x = x.cuda()
-                #y = y.cuda()
+            for x, y in tqdm(dataloader,position=0, leave=True):
+                x = x.to(device)
+                y = y.to(device)
                 step += 1
 
                 # forward pass
@@ -110,42 +113,60 @@ def train(model, train_dl, valid_dl, loss_fn, optimizer, acc_fn, epochs=1):
                 else:
                     with torch.no_grad():
                         outputs = model(x)
-                        loss = loss_fn(torch.squeeze(outputs), y.long())
+                        loss = loss_fn(torch.squeeze(outputs), y)
 
                 # stats - whatever is the phase
-                acc = acc_fn(outputs, y)
+                with torch.no_grad():
+                    acc = acc_fn(outputs, y)
 
-                running_acc  += acc*dataloader.batch_size
-                running_loss += loss*dataloader.batch_size 
-
-                if step % 10 == 0:
-                    # clear_output(wait=True)
-                    print('Current step: {}  Loss: {}  Acc: {}'.format(step, loss, acc))
-                    # print(torch.cuda.memory_summary())
-
+                    running_acc  += acc*dataloader.batch_size
+                    running_loss += loss*dataloader.batch_size 
+                
             epoch_loss = running_loss / len(dataloader.dataset)
             epoch_acc = running_acc / len(dataloader.dataset)
 
+            train_loss.append(epoch_loss) if phase=='train' else valid_loss.append(epoch_loss)
+            train_acc.append(epoch_acc) if phase=='train' else valid_acc.append(epoch_acc)
+
             print('{} Loss: {:.4f} Acc: {}'.format(phase, epoch_loss, epoch_acc))
 
-            train_loss.append(epoch_loss) if phase=='train' else valid_loss.append(epoch_loss)
+        # plot the training loss
+        plt.style.use("ggplot")
+        plt.figure()
+        plt.plot(train_loss, label="train_loss")
+        plt.plot(valid_loss, label="validation_loss")
+        plt.plot(train_acc, label="train_accuracy")
+        plt.plot(valid_acc, label="validation_accuracy")
+        plt.title("Training Loss/Accuracy on Dataset")
+        plt.xlabel("Epoch #")
+        plt.ylabel("Loss/Accuracy")
+        plt.legend(loc="upper right")
+        plt.savefig('/home/64f/msi/output/plot/' + f'plot_epoch{epoch}.png')
+
+        #save the model for each epoch
+        torch.save(model.state_dict(), '/home/64f/msi/output/saved_model' + f'model_epoch{epoch}.pt')
 
     time_elapsed = time.time() - start
-    print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))    
-    return train_loss, valid_loss    
+    print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60)) 
+
+    return None    
 
 def acc_metric(predb, yb):
-    return (predb.argmax(dim=1) == yb).float().mean()
+    p = torch.sigmoid(predb)
+    predmask = (p > 0.5).double()
+    return (predmask == yb).float().mean()
 
 if __name__ == '__main__':
     unet = UNET(3,1)
-    dm = czi_dataloader.CZIDataModule('/achs/inzamam/msi/czi_data/all_data')
+    summary(unet)
+    # use torchinfo to see model summary 
+    dm = czi_dataloader.CZIDataModule('/achs/inzamam/msi/czi_data/dataset')
     dm.setup()
     train_dl = dm.train_dataloader()
     valid_dl = dm.val_dataloader()
-    loss_fn = nn.CrossEntropyLoss()
+    loss_fn = nn.BCEWithLogitsLoss()
     opt = torch.optim.Adam(unet.parameters(), lr=0.01)
-    train_loss, valid_loss = train(unet,train_dl, valid_dl, loss_fn, opt, acc_metric, epochs=50)
+    _ = train(unet,train_dl, valid_dl, loss_fn, opt, acc_metric, epochs=50)
     
 
 
