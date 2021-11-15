@@ -10,7 +10,6 @@ from torch.utils.data import random_split
 from sklearn.model_selection import KFold, train_test_split
 
 
-# Dataset class that can take input all the slices e.g 1327,1405,1900 etc.
 class CZIPatchDataset(Dataset):
     def __init__(self, img_dir, transform=None):
         self.img_dir = img_dir 
@@ -28,7 +27,7 @@ class CZIPatchDataset(Dataset):
         # change dimension from HWC to CHW 
         image = torch.permute(image, (2, 0, 1))
         # get label
-        label = dict_patch.get('label')
+        label = dict_patch.get('label').unsqueeze(dim=0)
         if self.transform:
             image = self.transform(image)
         return image, label
@@ -37,10 +36,10 @@ class CZIDataModule(pl.LightningDataModule):
     def __init__(self, data_dir):
         super().__init__()
         self.data_dir = data_dir
-        self.transform = transforms.Compose([transforms.Normalize(mean=[696.5508, 479.1579, 525.0390],
-                                              std=[247.2921, 204.0386, 174.9929]),
-                                             transforms.ToPILImage(),
-                                             transforms.ToTensor()])
+        self.transform = transforms.Compose([transforms.ToPILImage(),
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225])])
 
     def setup(self):
 
@@ -50,13 +49,14 @@ class CZIDataModule(pl.LightningDataModule):
 
 
     def train_dataloader(self):
-        return DataLoader(self.train, batch_size=32, shuffle=True, pin_memory=True, num_workers=10)
+        return DataLoader(self.train, batch_size=16, shuffle=True, pin_memory=True, num_workers=10)
 
     def val_dataloader(self):
-        return DataLoader(self.val, batch_size=32, shuffle=True, pin_memory=True, num_workers=10)
+        return DataLoader(self.val, batch_size=16, shuffle=True, pin_memory=True, num_workers=10)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=32, shuffle=True, pin_memory=True, num_workers=10)
+        return DataLoader(self.test, batch_size=16, shuffle=True, pin_memory=True, num_workers=10)
+                                             
 
 if __name__ == '__main__':
     import argparse
