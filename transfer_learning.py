@@ -100,7 +100,7 @@ def train(model, train_dl, valid_dl, loss_fn, optimizer, acc_fn, epochs=1):
     return None    
 
 def acc_metric(predb, yb):
-    #p = torch.sigmoid(predb)
+    p = torch.sigmoid(predb)
     predmask = (predb > 0.0).double()
     return (predmask == yb).float().mean()
 
@@ -140,8 +140,8 @@ if __name__ == '__main__':
     dm.setup()
     train_dl = dm.train_dataloader()
     valid_dl = dm.val_dataloader()
-    loss_fn = nn.BCEWithLogitsLoss()
-    opt = torch.optim.Adam(params_to_update, lr=0.01)
+    loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([5.0]))
+    opt = torch.optim.Adam(params_to_update, lr=0.1)
     _ = train(model_ft,train_dl, valid_dl, loss_fn, opt, acc_metric, epochs=50)
     
 
