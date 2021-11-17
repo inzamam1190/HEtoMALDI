@@ -4,7 +4,6 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 import h5py
 from tqdm import tqdm
-import hdf5plugin
 from patchify import patchify, unpatchify
 import time
 from torchvision import models
@@ -42,29 +41,44 @@ def get_prediction(patches,model,device):
     return pred_mask
 
 if __name__ == '__main__':
-    f = h5py.File('czi_features.h5','r')
-    image_1900_masked = f['features_1900']
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--statedict_file', required=True, help='Filename to load')
+    parser.add_argument('--section_id', required=True, help='Subject ID, i.e. 1900')
+    parser.add_argument('--output_file', '-o', required=True, help='Where to place output torch tensor (should end in .pt or .pth)')
+    args = parser.parse_args()
 
-    print(image_1900_masked )
+    model = initialize_model(1, feature_extract=True)
 
-    print('it will take some time to load the whole image in a numpy array before making patches')
-    img = np.array(image_1900_masked)
-
-    print('Done loading into array! Making patches!')
-    patches_image = patchify(img, (512, 512, 3), step=512)
-
-    print(f'Done patching! Shape of the patch: {patches_image.shape}')
-
-    model = initialize_model(1,feature_extract=True)
-
-    model.load_state_dict(torch.load('/achs/inzamam/msi/model_epoch12.pt'))
+    # '/achs/inzamam/msi/model_epoch12.pt'
+    model.load_state_dict(torch.load(args.statedict_file))
     model.eval()
 
     device = torch.device("cuda:0")
     model = model.to(device)
 
-    pred_mask = get_prediction(patches_image,model,device)
+    tx = transforms.Normalize(mean=[696.5508, 479.1579, 525.0390], std=[247.2921, 204.0386, 174.9929])
 
-    print(pred_mask.shape)
 
-            
+    ffile = '/achs/inzamam/msi/czi_features.h5'
+    with h5py.File(ffile,'r') as f:
+        img = f[f'features_{args.section_id}']
+
+        M = 512
+        with torch.no_grad():
+            fullpred = torch.zeros(*img.shape[-3:-1], dtype=torch.float32, device='cpu')
+            for i in tqdm(range(0, fullpred.shape[0], M)):
+                for j in range(0, fullpred.shape[1], M):
+                    # Load patch
+                    endy = min(i+M, img.shape[-3])
+                    endx = min(j+M, img.shape[-2])
+                    patch = torch.tensor(img[i:endy, j:endx, :]).cuda()
+                    patch = torch.permute(patch, (2, 0, 1)).unsqueeze(0)
+                    # standardize
+                    patch = tx(patch)
+                    # compute prediction
+                    pred = model(patch)['out']
+                    predprob = torch.sigmoid(pred).squeeze().cpu()
+                    fullpred[i:endy, j:endx] = predprob
+
+    torch.save(fullpred, args.output_file)
