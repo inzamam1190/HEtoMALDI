@@ -45,6 +45,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--statedict_file', required=True, help='Filename to load')
     parser.add_argument('--section_id', required=True, help='Subject ID, i.e. 1900')
+    parser.add_argument('--patch_size', default=2048, type=int, help='Size of square patches in pixels (not counting halos).')
+    parser.add_argument('--halo_width', default=0, type=int, help='Size of halos to add to patch size on each side.')
     parser.add_argument('--output_file', '-o', required=True, help='Where to place output torch tensor (should end in .pt or .pth)')
     args = parser.parse_args()
 
@@ -59,26 +61,46 @@ if __name__ == '__main__':
 
     tx = transforms.Normalize(mean=[696.5508, 479.1579, 525.0390], std=[247.2921, 204.0386, 174.9929])
 
+    M = args.patch_size
 
     ffile = '/achs/inzamam/msi/czi_features.h5'
     with h5py.File(ffile,'r') as f:
         img = f[f'features_{args.section_id}']
 
-        M = 512
         with torch.no_grad():
             fullpred = torch.zeros(*img.shape[-3:-1], dtype=torch.float32, device='cpu')
-            for i in tqdm(range(0, fullpred.shape[0], M)):
-                for j in range(0, fullpred.shape[1], M):
-                    # Load patch
-                    endy = min(i+M, img.shape[-3])
-                    endx = min(j+M, img.shape[-2])
-                    patch = torch.tensor(img[i:endy, j:endx, :]).cuda()
+            for i in tqdm(range(0,
+                    fullpred.shape[0] - args.patch_size + 1,
+                    args.patch_size)):
+                for j in range(0,
+                        fullpred.shape[1] - args.patch_size + 1,
+                        args.patch_size):
+                    # Load patch with halo
+                    starty = max(i - args.halo_width, 0)
+                    startx = max(j - args.halo_width, 0)
+                    endy = min(i + M + args.halo_width, img.shape[-3])
+                    endx = min(j + M + args.halo_width, img.shape[-2])
+                    # compute interior bounds
+                    intstarty = i
+                    intstartx = j
+                    intendy = min(i + M, img.shape[-3])
+                    intendx = min(j + M, img.shape[-2])
+
+                    patch = torch.tensor(img[starty:endy, startx:endx, :]).cuda()
                     patch = torch.permute(patch, (2, 0, 1)).unsqueeze(0)
                     # standardize
                     patch = tx(patch)
                     # compute prediction
                     pred = model(patch)['out']
                     predprob = torch.sigmoid(pred).squeeze().cpu()
-                    fullpred[i:endy, j:endx] = predprob
+                    fullpred[
+                            intstarty:intendy,
+                            intstartx:intendx,
+                        ] = \
+                            predprob[
+                                intstarty - starty: predprob.shape[0] + intendy - endy,
+                                intstartx - startx: predprob.shape[1] + intendx - endx,
+                            ]
+
 
     torch.save(fullpred, args.output_file)
