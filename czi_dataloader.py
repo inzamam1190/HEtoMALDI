@@ -36,10 +36,13 @@ class CZIDataModule(pl.LightningDataModule):
     def __init__(self, data_dir):
         super().__init__()
         self.data_dir = data_dir
-        self.transform = transforms.Compose([transforms.ToPILImage(),
-                                             transforms.ToTensor(),
-                                             transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                              std=[0.229, 0.224, 0.225])])
+        self.transform = transforms.Compose([#transforms.ToPILImage(),
+                                             #transforms.ToTensor(),
+                                             transforms.Normalize(
+                                                 mean=[696.5508, 479.1579, 525.0390], std=[247.2921, 204.0386, 174.9929])
+                                                 #mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                                             #    mean=[0.4894, 0.4333, 0.5735], std=[0.3099, 0.2850, 0.2932])
+                                              ])
 
     def setup(self):
 
@@ -48,14 +51,14 @@ class CZIDataModule(pl.LightningDataModule):
         self.train, self.val, self.test = random_split(data_full, [5000, 1000, 1225], generator=torch.Generator().manual_seed(42))
 
 
-    def train_dataloader(self):
-        return DataLoader(self.train, batch_size=16, shuffle=True, pin_memory=True, num_workers=10)
+    def train_dataloader(self, batch_size=16, num_workers=10, shuffle=True):
+        return DataLoader(self.train, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers)
 
-    def val_dataloader(self):
-        return DataLoader(self.val, batch_size=16, shuffle=True, pin_memory=True, num_workers=10)
+    def val_dataloader(self, batch_size=16, num_workers=10, shuffle=False):
+        return DataLoader(self.val, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers)
 
-    def test_dataloader(self):
-        return DataLoader(self.test, batch_size=16, shuffle=True, pin_memory=True, num_workers=10)
+    def test_dataloader(self, batch_size=16, num_workers=10, shuffle=False):
+        return DataLoader(self.test, batch_size=batch_size, shuffle=shuffle, pin_memory=True, num_workers=num_workers)
                                              
 
 if __name__ == '__main__':
