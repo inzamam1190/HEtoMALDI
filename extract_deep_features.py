@@ -61,7 +61,7 @@ if __name__ == '__main__':
     fts = features['feats'].squeeze().cpu().numpy()
     print(fts.shape) 
     #downsample value
-    div = M//fts.shape[1]
+    
     del features
 
     with h5py.File(file, "r") as fsource:
@@ -71,37 +71,28 @@ if __name__ == '__main__':
                 raise RuntimeError(
                     f"Refusing to overwriting existing dataset {target_dataset} in {target_file}"
                 )
+            div = M//fts.shape[1]
             ds_target = ftarget.create_dataset(
                 target_dataset, shape=(fts.shape[0],ds_source.shape[1]//div,ds_source.shape[2]//div), chunks=True, dtype='f'
                 )
 
-            with torch.no_grad():
-                for i in tqdm(range(0, ds_source.shape[-1]-M+1, M)):
-                    for j in range(0, ds_source.shape[-2]-M+1, M):
-                        
-                        features = {}
-                        # Load patch with halo
-                        starty = max(i - H, 0)
-                        startx = max(j - H, 0)
-                        endy = min(i + M + H, ds_source.shape[-1])
-                        endx = min(j + M + H, ds_source.shape[-2])
-                        # compute interior bounds
-                        intstarty = i
-                        intstartx = j
-                        intendy = min(i + M, ds_source.shape[-1])
-                        intendx = min(j + M, ds_source.shape[-2])
+            for i in tqdm(range(0, ds_source.shape[1], M)):
+                for j in range(0, ds_source.shape[2], M):
+                    features={}
+                    
+                    endy = min(i+M, ds_source.shape[1])
+                    endx = min(j+M, ds_source.shape[2])
+                    patch = torch.tensor(ds_source[:, i:endy, j:endx]).cuda()
+                    patch = patch.unsqueeze(0)
+                    #standardize
+                    patch = tx(patch)
 
-                        patch = torch.tensor(ds_source[:, startx:endx, starty:endy]).cuda()
-                        patch = patch.unsqueeze(0)
-                        #standardize
-                        patch = tx(patch)
+                    #get features
+                    out = model(patch)['out']
+                    ft = features['feats'].squeeze().cpu().numpy()
 
-                        #get features
-                        out = model(patch)['out']
-                        ft = features['feats'].squeeze().cpu().numpy()
-                        ds_target[:, intstartx:(intendx//div), intstarty:(intendy//div)] = ft[:,((H//div)//2):(ft.shape[1]-((H//div)//2)),
-                                                                                            ((H//div)//2):(ft.shape[1]-((H//div)//2))]
-                        del features
+                    ds_target[:, i:endy//div, j:endx//div] = ft
+                    del features
                         
 
 
