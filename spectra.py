@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 import h5py
 from tqdm import tqdm
 
-def geth5(dir,filename):
+
+def geth5(dir, filename):
     """
     Convert imzML file to hdf5 file
     """
@@ -19,23 +20,37 @@ def geth5(dir,filename):
     p = ImzMLParser(dir)
     # Metadtata
     print(p.imzmldict)
-    #create hdf5 dataset and write to it
+    # create hdf5 dataset and write to it
     mzA, intA = p.getspectrum(10)
-    with h5py.File(f'{filename}-rapiflex.h5', 'w') as f:
-        im = f.create_dataset('data', shape=(len(intA),p.imzmldict['max count of pixels x']+1,p.imzmldict['max count of pixels y']+1), chunks=(len(intA), 1,1), dtype='f')
-        for i,(x,y,z) in tqdm(enumerate(p.coordinates),total=len(p.coordinates)):
+    with h5py.File(f"{filename}-rapiflex.h5", "w") as f:
+        im = f.create_dataset(
+            "data",
+            shape=(
+                len(intA),
+                p.imzmldict["max count of pixels x"] + 1,
+                p.imzmldict["max count of pixels y"] + 1,
+            ),
+            chunks=(len(intA), 1, 1),
+            dtype="f",
+        )
+        for i, (x, y, z) in tqdm(enumerate(p.coordinates), total=len(p.coordinates)):
             _, intensity = p.getspectrum(i)
-            im[:,x,y] = np.asarray(intensity)
+            im[:, x, y] = np.asarray(intensity)
         f.close()
-    
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--datadir', '-d', required='True',
-            help='Top-level directory of pyimzML file')
-    parser.add_argument('--filename', '-f', required='True',
-            help='name of the saved file')
+
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--datadir", "-d", required="True", help="Top-level directory of pyimzML file"
+    )
+    parser.add_argument(
+        "--filename", "-f", required="True", help="name of the saved file"
+    )
     args = parser.parse_args()
 
     geth5(args.datadir, args.filename)

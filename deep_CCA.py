@@ -33,7 +33,8 @@ from torch.utils.data import BatchSampler, SequentialSampler, RandomSampler
 import time
 import logging
 
-class cca_loss():
+
+class cca_loss:
     def __init__(self, outdim_size, use_all_singular_values, device):
         self.outdim_size = outdim_size
         self.use_all_singular_values = use_all_singular_values
@@ -56,7 +57,7 @@ class cca_loss():
         o1 = o2 = H1.size(0)
 
         m = H1.size(1)
-        #print(H1.size())
+        # print(H1.size())
 
         H1bar = H1 - H1.mean(dim=1).unsqueeze(dim=1)
         H2bar = H2 - H2.mean(dim=1).unsqueeze(dim=1)
@@ -64,10 +65,12 @@ class cca_loss():
         # assert torch.isnan(H2bar).sum().item() == 0
 
         SigmaHat12 = (1.0 / (m - 1)) * torch.matmul(H1bar, H2bar.t())
-        SigmaHat11 = (1.0 / (m - 1)) * torch.matmul(H1bar,
-                                                    H1bar.t()) + r1 * torch.eye(o1, device=self.device)
-        SigmaHat22 = (1.0 / (m - 1)) * torch.matmul(H2bar,
-                                                    H2bar.t()) + r2 * torch.eye(o2, device=self.device)
+        SigmaHat11 = (1.0 / (m - 1)) * torch.matmul(H1bar, H1bar.t()) + r1 * torch.eye(
+            o1, device=self.device
+        )
+        SigmaHat22 = (1.0 / (m - 1)) * torch.matmul(H2bar, H2bar.t()) + r2 * torch.eye(
+            o2, device=self.device
+        )
         # assert torch.isnan(SigmaHat11).sum().item() == 0
         # assert torch.isnan(SigmaHat12).sum().item() == 0
         # assert torch.isnan(SigmaHat22).sum().item() == 0
@@ -91,13 +94,16 @@ class cca_loss():
         # print(posInd2.size())
 
         SigmaHat11RootInv = torch.matmul(
-            torch.matmul(V1, torch.diag(D1 ** -0.5)), V1.t())
+            torch.matmul(V1, torch.diag(D1 ** -0.5)), V1.t()
+        )
         SigmaHat22RootInv = torch.matmul(
-            torch.matmul(V2, torch.diag(D2 ** -0.5)), V2.t())
+            torch.matmul(V2, torch.diag(D2 ** -0.5)), V2.t()
+        )
 
-        Tval = torch.matmul(torch.matmul(SigmaHat11RootInv,
-                                         SigmaHat12), SigmaHat22RootInv)
-        #print(Tval.size())
+        Tval = torch.matmul(
+            torch.matmul(SigmaHat11RootInv, SigmaHat12), SigmaHat22RootInv
+        )
+        # print(Tval.size())
 
         if self.use_all_singular_values:
             # all singular values are used to calculate the correlation
@@ -107,9 +113,13 @@ class cca_loss():
         else:
             # just the top self.outdim_size singular values are used
             trace_TT = torch.matmul(Tval.t(), Tval)
-            trace_TT = torch.add(trace_TT, (torch.eye(trace_TT.shape[0])*r1).to(self.device)) # regularization for more stability
+            trace_TT = torch.add(
+                trace_TT, (torch.eye(trace_TT.shape[0]) * r1).to(self.device)
+            )  # regularization for more stability
             U, V = torch.symeig(trace_TT, eigenvectors=True)
-            U = torch.where(U>eps, U, (torch.ones(U.shape).double()*eps).to(self.device))
+            U = torch.where(
+                U > eps, U, (torch.ones(U.shape).double() * eps).to(self.device)
+            )
             U = U.topk(self.outdim_size)[0]
             corr = torch.sum(torch.sqrt(U))
         return -corr
@@ -122,16 +132,20 @@ class MlpNet(nn.Module):
         layer_sizes = [input_size] + layer_sizes
         for l in range(len(layer_sizes) - 1):
             if l == len(layer_sizes) - 2:
-                layers.append(nn.Sequential(
-                    nn.BatchNorm1d(num_features=layer_sizes[l], affine=False),
-                    nn.Linear(layer_sizes[l], layer_sizes[l + 1]),
-                ))
+                layers.append(
+                    nn.Sequential(
+                        nn.BatchNorm1d(num_features=layer_sizes[l], affine=False),
+                        nn.Linear(layer_sizes[l], layer_sizes[l + 1]),
+                    )
+                )
             else:
-                layers.append(nn.Sequential(
-                    nn.Linear(layer_sizes[l], layer_sizes[l + 1]),
-                    nn.Sigmoid(),
-                    nn.BatchNorm1d(num_features=layer_sizes[l + 1], affine=False),
-                ))
+                layers.append(
+                    nn.Sequential(
+                        nn.Linear(layer_sizes[l], layer_sizes[l + 1]),
+                        nn.Sigmoid(),
+                        nn.BatchNorm1d(num_features=layer_sizes[l + 1], affine=False),
+                    )
+                )
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
@@ -141,7 +155,16 @@ class MlpNet(nn.Module):
 
 
 class DeepCCA(nn.Module):
-    def __init__(self, layer_sizes1, layer_sizes2, input_size1, input_size2, outdim_size, use_all_singular_values, device=torch.device('cpu')):
+    def __init__(
+        self,
+        layer_sizes1,
+        layer_sizes2,
+        input_size1,
+        input_size2,
+        outdim_size,
+        use_all_singular_values,
+        device=torch.device("cpu"),
+    ):
         super(DeepCCA, self).__init__()
         self.model1 = MlpNet(layer_sizes1, input_size1).double()
         self.model2 = MlpNet(layer_sizes2, input_size2).double()
@@ -160,25 +183,36 @@ class DeepCCA(nn.Module):
         return output1, output2
 
 
-class Trainer():
-    def __init__(self, model, linear_cca, outdim_size, epoch_num, batch_size, learning_rate, reg_par, device=torch.device('cpu')):
+class Trainer:
+    def __init__(
+        self,
+        model,
+        linear_cca,
+        outdim_size,
+        epoch_num,
+        batch_size,
+        learning_rate,
+        reg_par,
+        device=torch.device("cpu"),
+    ):
         self.model = nn.DataParallel(model)
         self.model.to(device)
         self.epoch_num = epoch_num
         self.batch_size = batch_size
         self.loss = model.loss
         self.optimizer = torch.optim.RMSprop(
-            self.model.parameters(), lr=learning_rate, weight_decay=reg_par)
+            self.model.parameters(), lr=learning_rate, weight_decay=reg_par
+        )
         self.device = device
 
         self.linear_cca = linear_cca
 
         self.outdim_size = outdim_size
 
-        formatter = logging.Formatter(
-            "[ %(levelname)s : %(asctime)s ] - %(message)s")
+        formatter = logging.Formatter("[ %(levelname)s : %(asctime)s ] - %(message)s")
         logging.basicConfig(
-            level=logging.DEBUG, format="[ %(levelname)s : %(asctime)s ] - %(message)s")
+            level=logging.DEBUG, format="[ %(levelname)s : %(asctime)s ] - %(message)s"
+        )
         self.logger = logging.getLogger("Pytorch")
         fh = logging.FileHandler("DCCA.log")
         fh.setFormatter(formatter)
@@ -187,7 +221,16 @@ class Trainer():
         self.logger.info(self.model)
         self.logger.info(self.optimizer)
 
-    def fit(self, x1, x2, vx1=None, vx2=None, tx1=None, tx2=None, checkpoint='checkpoint.model'):
+    def fit(
+        self,
+        x1,
+        x2,
+        vx1=None,
+        vx2=None,
+        tx1=None,
+        tx2=None,
+        checkpoint="checkpoint.model",
+    ):
         """
         x1, x2 are the vectors needs to be make correlated
         dim=[batch_size, feats]
@@ -209,8 +252,13 @@ class Trainer():
         for epoch in range(self.epoch_num):
             epoch_start_time = time.time()
             self.model.train()
-            batch_idxs = list(BatchSampler(RandomSampler(
-                range(data_size)), batch_size=self.batch_size, drop_last=False))
+            batch_idxs = list(
+                BatchSampler(
+                    RandomSampler(range(data_size)),
+                    batch_size=self.batch_size,
+                    drop_last=False,
+                )
+            )
             for batch_idx in batch_idxs:
                 self.optimizer.zero_grad()
                 batch_x1 = x1[batch_idx, :]
@@ -230,17 +278,24 @@ class Trainer():
                     info_string += " - val_loss: {:.4f}".format(val_loss)
                     if val_loss < best_val_loss:
                         self.logger.info(
-                            "Epoch {:d}: val_loss improved from {:.4f} to {:.4f}, saving model to {}".format(epoch + 1, best_val_loss, val_loss, checkpoint))
+                            "Epoch {:d}: val_loss improved from {:.4f} to {:.4f}, saving model to {}".format(
+                                epoch + 1, best_val_loss, val_loss, checkpoint
+                            )
+                        )
                         best_val_loss = val_loss
                         torch.save(self.model.state_dict(), checkpoint)
                     else:
-                        self.logger.info("Epoch {:d}: val_loss did not improve from {:.4f}".format(
-                            epoch + 1, best_val_loss))
+                        self.logger.info(
+                            "Epoch {:d}: val_loss did not improve from {:.4f}".format(
+                                epoch + 1, best_val_loss
+                            )
+                        )
             else:
                 torch.save(self.model.state_dict(), checkpoint)
             epoch_time = time.time() - epoch_start_time
-            self.logger.info(info_string.format(
-                epoch + 1, self.epoch_num, epoch_time, train_loss))
+            self.logger.info(
+                info_string.format(epoch + 1, self.epoch_num, epoch_time, train_loss)
+            )
         # train_linear_cca
         if self.linear_cca is not None:
             _, outputs = self._get_outputs(x1, x2)
@@ -254,7 +309,7 @@ class Trainer():
 
         if tx1 is not None and tx2 is not None:
             loss = self.test(tx1, tx2)
-            self.logger.info('loss on test data: {:.4f}'.format(loss))
+            self.logger.info("loss on test data: {:.4f}".format(loss))
 
     def test(self, x1, x2, use_linear_cca=False):
         with torch.no_grad():
@@ -274,8 +329,13 @@ class Trainer():
         with torch.no_grad():
             self.model.eval()
             data_size = x1.size(0)
-            batch_idxs = list(BatchSampler(SequentialSampler(
-                range(data_size)), batch_size=self.batch_size, drop_last=False))
+            batch_idxs = list(
+                BatchSampler(
+                    SequentialSampler(range(data_size)),
+                    batch_size=self.batch_size,
+                    drop_last=False,
+                )
+            )
             losses = []
             outputs1 = []
             outputs2 = []
@@ -287,12 +347,14 @@ class Trainer():
                 outputs2.append(o2)
                 loss = self.loss(o1, o2)
                 losses.append(loss.item())
-        outputs = [torch.cat(outputs1, dim=0).cpu().numpy(),
-                   torch.cat(outputs2, dim=0).cpu().numpy()]
+        outputs = [
+            torch.cat(outputs1, dim=0).cpu().numpy(),
+            torch.cat(outputs2, dim=0).cpu().numpy(),
+        ]
         return losses, outputs
 
 
-class linear_cca():
+class linear_cca:
     def __init__(self):
         self.w = [None, None]
         self.m = [None, None]
@@ -320,20 +382,19 @@ class linear_cca():
         H2bar = H2 - numpy.tile(self.m[1], (m, 1))
 
         SigmaHat12 = (1.0 / (m - 1)) * numpy.dot(H1bar.T, H2bar)
-        SigmaHat11 = (1.0 / (m - 1)) * numpy.dot(H1bar.T,
-                                                 H1bar) + r1 * numpy.identity(o1)
-        SigmaHat22 = (1.0 / (m - 1)) * numpy.dot(H2bar.T,
-                                                 H2bar) + r2 * numpy.identity(o2)
+        SigmaHat11 = (1.0 / (m - 1)) * numpy.dot(H1bar.T, H1bar) + r1 * numpy.identity(
+            o1
+        )
+        SigmaHat22 = (1.0 / (m - 1)) * numpy.dot(H2bar.T, H2bar) + r2 * numpy.identity(
+            o2
+        )
 
         [D1, V1] = numpy.linalg.eigh(SigmaHat11)
         [D2, V2] = numpy.linalg.eigh(SigmaHat22)
-        SigmaHat11RootInv = numpy.dot(
-            numpy.dot(V1, numpy.diag(D1 ** -0.5)), V1.T)
-        SigmaHat22RootInv = numpy.dot(
-            numpy.dot(V2, numpy.diag(D2 ** -0.5)), V2.T)
+        SigmaHat11RootInv = numpy.dot(numpy.dot(V1, numpy.diag(D1 ** -0.5)), V1.T)
+        SigmaHat22RootInv = numpy.dot(numpy.dot(V2, numpy.diag(D2 ** -0.5)), V2.T)
 
-        Tval = numpy.dot(numpy.dot(SigmaHat11RootInv,
-                                   SigmaHat12), SigmaHat22RootInv)
+        Tval = numpy.dot(numpy.dot(SigmaHat11RootInv, SigmaHat12), SigmaHat22RootInv)
 
         [U, D, V] = numpy.linalg.svd(Tval)
         V = V.T
@@ -349,34 +410,50 @@ class linear_cca():
     def test(self, H1, H2):
         return self._get_result(H1, 0), self._get_result(H2, 1)
 
+
 def load_data(data_file):
     """loads the data from the hdf5 files, and converts to numpy arrays"""
-    print('loading data ...')
-    with h5py.File(data_file,'r') as f:
-        pca_dataset = f.get('output')[()]
+    print("loading data ...")
+    with h5py.File(data_file, "r") as f:
+        pca_dataset = f.get("output")[()]
         f.close()
 
     return pca_dataset
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     import argparse
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--data1', '-d1', required='True',
-            help='saved hdf5 pca dataset for the first dataset')
-    parser.add_argument('--data2', '-d2', required='True',
-            help='saved hdf5 pca dataset for the second dataset')
-    parser.add_argument('--filename', '-f', required='True',
-            help='the path to save the final learned features')
+
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--data1",
+        "-d1",
+        required="True",
+        help="saved hdf5 pca dataset for the first dataset",
+    )
+    parser.add_argument(
+        "--data2",
+        "-d2",
+        required="True",
+        help="saved hdf5 pca dataset for the second dataset",
+    )
+    parser.add_argument(
+        "--filename",
+        "-f",
+        required="True",
+        help="the path to save the final learned features",
+    )
 
     args = parser.parse_args()
-   
+
     data1 = load_data(args.data1)
     data2 = load_data(args.data2)
-    
-    device = torch.device('cpu')
-    #print("Using", torch.cuda.device_count(), "GPUs")
+
+    device = torch.device("cpu")
+    # print("Using", torch.cuda.device_count(), "GPUs")
 
     # the size of the new space learned by the model (number of the new features)
     outdim_size = 10
@@ -407,39 +484,58 @@ if __name__ == '__main__':
     apply_linear_cca = True
 
     # Building, training, and producing the new features by DCCA
-    model = DeepCCA(layer_sizes1, layer_sizes2, input_shape1,
-                    input_shape2, outdim_size, use_all_singular_values, device=device).double()
+    model = DeepCCA(
+        layer_sizes1,
+        layer_sizes2,
+        input_shape1,
+        input_shape2,
+        outdim_size,
+        use_all_singular_values,
+        device=device,
+    ).double()
     l_cca = None
     if apply_linear_cca:
         l_cca = linear_cca()
-    trainer = Trainer(model, l_cca, outdim_size, epoch_num, batch_size,
-                    learning_rate, reg_par, device=device)
+    trainer = Trainer(
+        model,
+        l_cca,
+        outdim_size,
+        epoch_num,
+        batch_size,
+        learning_rate,
+        reg_par,
+        device=device,
+    )
     train1, train2 = data1, data2
     # val1=None
     # test1=None
     trainer.fit(train1, train2)
 
-    set_size = [0, train1.size(0), train1.size(
-        0) + val1.size(0), train1.size(0) + val1.size(0) + test1.size(0)]
+    set_size = [
+        0,
+        train1.size(0),
+        train1.size(0) + val1.size(0),
+        train1.size(0) + val1.size(0) + test1.size(0),
+    ]
     loss, outputs = solver.test(train1, train2, apply_linear_cca)
-
 
     new_data = []
     # print(outputs)
     for idx in range(3):
-        new_data.append([outputs[0][set_size[idx]:set_size[idx + 1], :],
-                         outputs[1][set_size[idx]:set_size[idx + 1], :], data1[idx][1]])
-    
+        new_data.append(
+            [
+                outputs[0][set_size[idx] : set_size[idx + 1], :],
+                outputs[1][set_size[idx] : set_size[idx + 1], :],
+                data1[idx][1],
+            ]
+        )
+
     # Saving new features in a gzip pickled file specified by save_to
-    print('saving new features ...')
-    with h5py.File(args.filename,'w') as f1:
-        f1.create_dataset('features', data=new_data)
+    print("saving new features ...")
+    with h5py.File(args.filename, "w") as f1:
+        f1.create_dataset("features", data=new_data)
         f1.close()
 
-    d = torch.load('checkpoint.model')
+    d = torch.load("checkpoint.model")
     solver.model.load_state_dict(d)
     solver.model.parameters()
-
-
-
-

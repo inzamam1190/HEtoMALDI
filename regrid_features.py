@@ -10,7 +10,14 @@ def LinearInterpolate(source, target):
         # determine scaling from sizes
         scales = [t / s for s, t in zip(source.shape, target.shape)]
         # initialize a buffer holding the resampling grid
-        g = F.affine_grid(theta=torch.tensor([[scales[0], 0, 0], [0, scales[1], 0],]),)
+        g = F.affine_grid(
+            theta=torch.tensor(
+                [
+                    [scales[0], 0, 0],
+                    [0, scales[1], 0],
+                ]
+            ),
+        )
         self.register_buffer("grid", g)
 
     def forward(self, x):
@@ -63,7 +70,14 @@ class GaussianDownscale(nn.Module):
         self.gaussian = Gaussian2D(sigma=[2 / s for s in scales])
         # initialize a buffer holding the resampling grid
         g = F.affine_grid(
-            theta=torch.tensor([[[scales[0], 0, 0], [0, scales[1], 0],]]),
+            theta=torch.tensor(
+                [
+                    [
+                        [scales[0], 0, 0],
+                        [0, scales[1], 0],
+                    ]
+                ]
+            ),
             size=(1, *target.shape),
         )
         self.register_buffer("grid", g)
@@ -79,7 +93,7 @@ def regrid(source, target, device="cuda"):
     Given two datasets, regrid source to match shape of target and overwrite it.
 
     We use the following strategies:
-    
+
     (Downscaling) When the target shape is smaller than the source shape:
         - If the source shape is an integer multiple of the target shape, we perform average pooling.
         - Otherwise, we perform Gaussian blurring followed by linear interpolation.
@@ -164,6 +178,8 @@ if __name__ == "__main__":
                     f"Refusing to overwriting existing dataset {target_dsname} in {target_file}"
                 )
             ds_target = ftarget.create_dataset(
-                target_dsname, (*ds_source.shape[:-2], *args.output_shape), dtype="f",
+                target_dsname,
+                (*ds_source.shape[:-2], *args.output_shape),
+                dtype="f",
             )
             regrid(ds_source, ds_target)
