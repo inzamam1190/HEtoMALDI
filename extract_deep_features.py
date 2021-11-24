@@ -91,7 +91,7 @@ if __name__ == '__main__':
                     out = model(patch)['out']
                     ft = features['feats'].squeeze().cpu().numpy()
 
-                    ds_target[:, i:endy//div, j:endx//div] = ft
+                    ds_target[:, (i//div):(endy//div), (j//div):(endx//div)] = ft
                     del features
                         
 
