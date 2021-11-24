@@ -60,6 +60,8 @@ if __name__ == '__main__':
     out = model(random_input)['out']
     fts = features['feats'].squeeze().cpu().numpy()
     print(fts.shape) #layer 4 gives features in shape(2048,64,64) if M=512
+    div = M//fts.shape[1]
+    print(div)
     #downsample value
     
     del features
@@ -71,19 +73,20 @@ if __name__ == '__main__':
                 raise RuntimeError(
                     f"Refusing to overwriting existing dataset {target_dataset} in {target_file}"
                 )
-            div = M//fts.shape[1]
             ds_target = ftarget.create_dataset(
                 target_dataset, shape=(fts.shape[0],ds_source.shape[1]//div,ds_source.shape[2]//div), chunks=True, dtype='f'
                 ) #div is needed because our input shape is (3,512,512) (assuming M=512), and output is (2048,64,64). So dividing by 512/64=8
             # So, the dataset will be 8 times smaller in height and width but no. of channels will increase from 3 to 2048
-
-            for i in tqdm(range(0, ds_source.shape[1], M)):
-                for j in range(0, ds_source.shape[2], M):
+            tilenumy = ds_source.shape[1]//M
+            tilenumx = ds_source.shape[2]//M
+            for i in tqdm(range(tilenumy)):
+                for j in tqdm(range(tilenumx)):
                     features={}
                     
-                    endy = min(i+M, ds_source.shape[1])
-                    endx = min(j+M, ds_source.shape[2])
-                    patch = torch.tensor(ds_source[:, i:endy, j:endx]).cuda()
+                    #endy = min(i+M, ds_source.shape[1])
+                    #endx = min(j+M, ds_source.shape[2])
+                    
+                    patch = torch.tensor(ds_source[:, M*i: M*(i + 1), M*j: M*(j + 1)]).cuda()
                     patch = patch.unsqueeze(0)
                     #standardize
                     patch = tx(patch)
@@ -92,8 +95,8 @@ if __name__ == '__main__':
                     out = model(patch)['out']
                     ft = features['feats'].squeeze().cpu().numpy()
 
-                    ds_target[:, (i//div):(endy//div), (j//div):(endx//div)] = ft 
-                    del features
+                    ds_target[:, i*ft.shape[1]:(i+1)*ft.shape[1], j*ft.shape[2]:(j+1)*ft.shape[2]] = ft 
+                    #del features
                         
 
 
