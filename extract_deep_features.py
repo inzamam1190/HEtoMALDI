@@ -50,7 +50,7 @@ if __name__ == '__main__':
     tx = transforms.Normalize(mean=[696.5508, 479.1579, 525.0390], std=[247.2921, 204.0386, 174.9929])
     
     # register hook to a layer. can always change the layer. This line will change depending one the model
-    model.backbone.layer4.register_forward_hook(get_features('feats')) #shape(c,h,w)-->(c,64,64)
+    model.backbone.layer4.register_forward_hook(get_features('feats')) 
     device = torch.device("cuda:0")
     model = model.to(device)
 
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     random_input = torch.zeros((1,3,M,M), dtype=torch.float32, device='cuda:0')
     out = model(random_input)['out']
     fts = features['feats'].squeeze().cpu().numpy()
-    print(fts.shape) 
+    print(fts.shape) #layer 4 gives features in shape(2048,64,64) if M=512
     #downsample value
     
     del features
@@ -74,7 +74,8 @@ if __name__ == '__main__':
             div = M//fts.shape[1]
             ds_target = ftarget.create_dataset(
                 target_dataset, shape=(fts.shape[0],ds_source.shape[1]//div,ds_source.shape[2]//div), chunks=True, dtype='f'
-                )
+                ) #div is needed because our input shape is (3,512,512) (assuming M=512), and output is (2048,64,64). So dividing by 512/64=8
+            # So, the dataset will be 8 times smaller in height and width but no. of channels will increase from 3 to 2048
 
             for i in tqdm(range(0, ds_source.shape[1], M)):
                 for j in range(0, ds_source.shape[2], M):
@@ -91,7 +92,7 @@ if __name__ == '__main__':
                     out = model(patch)['out']
                     ft = features['feats'].squeeze().cpu().numpy()
 
-                    ds_target[:, (i//div):(endy//div), (j//div):(endx//div)] = ft
+                    ds_target[:, (i//div):(endy//div), (j//div):(endx//div)] = ft 
                     del features
                         
 
