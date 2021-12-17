@@ -1,27 +1,9 @@
 import h5py
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 from tqdm import tqdm
-
-
-def LinearInterpolate(source, target):
-    def __init__(self, source, target):
-        # determine scaling from sizes
-        scales = [t / s for s, t in zip(source.shape, target.shape)]
-        # initialize a buffer holding the resampling grid
-        g = F.affine_grid(
-            theta=torch.tensor(
-                [
-                    [scales[0], 0, 0],
-                    [0, scales[1], 0],
-                ]
-            ),
-        )
-        self.register_buffer("grid", g)
-
-    def forward(self, x):
-        F.grid_sample(x, self.grid, align_corners=False)
 
 
 class Gaussian1D(nn.Module):
@@ -34,7 +16,7 @@ class Gaussian1D(nn.Module):
         gauss = torch.exp((-((ts / sigma) ** 2) / 2))
         gauss /= gauss.sum()
         self.padding = (ks - 1) // 2
-        self.register_buffer("kernel", gauss)
+        self.register_buffer("kernel", gauss.view(1, 1, -1))
 
     def forward(self, x):
         return F.conv1d(x, self.kernel, padding=self.padding)
@@ -57,8 +39,9 @@ class Gaussian2D(nn.Module):
 
     def forward(self, x):
         # Perform convolution as series of 1D convs
-        bx = self.convx(x)
-        by = self.convy(bx.T).T
+        bx = self.convx(x.view(-1, 1, x.shape[-1])).view(*x.shape)
+        bxT = torch.swapaxes(bx.view(-1, x.shape[-2], 1), -2, -1)
+        by = torch.swapaxes(self.convy(bxT), -2, -1).view(*x.shape)
         return by
 
 
@@ -67,23 +50,16 @@ class GaussianDownscale(nn.Module):
         super().__init__()
         # Initialize Gaussian convolution submodule
         # determine scale and width of Gaussian
-        self.gaussian = Gaussian2D(sigma=[2 / s for s in scales])
+        self.gaussian = Gaussian2D(sigma=[1.0 / (s * np.pi) for s in scales])
         # initialize a buffer holding the resampling grid
         g = F.affine_grid(
-            theta=torch.tensor(
-                [
-                    [
-                        [scales[0], 0, 0],
-                        [0, scales[1], 0],
-                    ]
-                ]
-            ),
-            size=(1, *target.shape),
+            theta=torch.tensor([[[1.0, 0, 0], [0, 1.0, 0]]]), size=(1, *target.shape),
         )
         self.register_buffer("grid", g)
 
     def forward(self, x):
         # convolve by Gaussian
+        # x = self.gaussian(x)
         # interpolate by grid
         return F.grid_sample(x, self.grid)
 
@@ -121,7 +97,7 @@ def regrid(source, target, device="cuda"):
             f"Only pure downscaling or pure upscaling are supported. Found scales: {scales}"
         )
     if up:
-        # func = LinearInterpolate(source, target, scales).to(device)
+        print("Upsampling")
         func = nn.Upsample(size=target.shape[-2:]).to(device)
     else:  # downscaling
         # determine whether we can get away with simple average pooling
@@ -129,9 +105,11 @@ def regrid(source, target, device="cuda"):
         if all(r == 0 for r in remainders):  # we can pool!
             pooling = [s // t for s, t in zip(source.shape, target.shape)]
             func = nn.AvgPool2d(pooling).to(device)
+            print("Pooling", pooling)
         else:
             # can't pool, so we need to do combined
             func = GaussianDownscale(source, target, scales).to(device)
+            print("Gaussian downscaling", scales)
 
     # At this point, func should take in a torch.Tensor of shape 1HW and
     # transform it to the target shape.
@@ -150,17 +128,20 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "source_dataset",
+        "--source_dataset",
+        "-s",
         nargs=2,
         help="HDF5 filename followed by dataset name for source data.",
     )
     parser.add_argument(
-        "target_dataset",
+        "--target_dataset",
+        "-t",
         nargs=2,
         help="HDF5 filename followed by dataset name to write. Must not exist.",
     )
     parser.add_argument(
         "--output_shape",
+        "-o",
         nargs=2,
         type=int,
         help="2D shape of output array (ignoring channel count), in YX order.",
@@ -178,8 +159,6 @@ if __name__ == "__main__":
                     f"Refusing to overwriting existing dataset {target_dsname} in {target_file}"
                 )
             ds_target = ftarget.create_dataset(
-                target_dsname,
-                (*ds_source.shape[:-2], *args.output_shape),
-                dtype="f",
+                target_dsname, (*ds_source.shape[:-2], *args.output_shape), dtype="f",
             )
             regrid(ds_source, ds_target)
