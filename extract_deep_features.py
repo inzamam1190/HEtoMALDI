@@ -70,6 +70,7 @@ if __name__ == "__main__":
         target_file, target_dataset = args.target_file
         M = args.patch_size
         H = args.halo_width
+
         #tx = transforms.Normalize(
             #mean=[696.5508, 479.1579, 525.0390], std=[247.2921, 204.0386, 174.9929]
         #)
@@ -84,6 +85,7 @@ if __name__ == "__main__":
         random_input = torch.zeros(
             (1, 3, M + 2 * H, M + 2 * H), dtype=torch.float32, device="cuda:0"
         )
+
         out = model(random_input)
         fts = features["feats"].squeeze().cpu().numpy()
         print(fts.shape)  # layer 4 gives features in shape(2048,64,64) if M=512
